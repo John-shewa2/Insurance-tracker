@@ -5,87 +5,92 @@ const cron = require('node-cron');
 const { Resend } = require('resend');
 require('dotenv').config();
 
-const Project = require('./models/Project');
-const projectRoutes = require('./routes/projectRoutes');
+const projectSchema = new mongoose.Schema({
+    borrowerName: { type: String, required: true },
+    approvedLoan: { type: Number, required: true },
+    outstandingLoan: { type: Number, required: true },
+    listFixedAsset: { type: String, required: true },
+    isInsured: { type: String, default: 'Yes' },
+    assetCode: { type: String, default: '' }, // Made optional
+    estimatedValueCollateral: { type: Number, default: 0 }, // Made optional
+    estimationDate: { type: Date }, // Made optional
+    sumInsured: { type: Number, default: 0 },
+    insuredDate: { type: Date, required: true },
+    expiryDate: { type: Date, required: true },
+    typeInsurancePolicy: { type: String, default: '' },
+    isDBEBeneficiary: { type: String, default: 'No' },
+    insuranceCompany: { type: String, default: '' },
+    officerEmail: { type: String, required: true },
+    directorEmail: { type: String, required: true },
+    reminderSent: { type: Boolean, default: false }
+}, { timestamps: true });
+
+const Project = mongoose.model('Project', projectSchema);
 
 const app = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ MongoDB Connected Successfully"))
-    .catch(err => console.error("❌ MongoDB Connection Error:", err));
+    .then(() => console.log("✅ Database Connected"))
+    .catch(err => console.error("❌ Connection Error:", err));
 
-// Routes
-app.use('/api/projects', projectRoutes);
-
-// --- AUTOMATION LOGIC (CRON JOB) ---
-// Runs every day at 09:00 AM to check for renewals
-cron.schedule('0 9 * * *', async () => {
-    console.log('🔍 Running daily insurance expiration check...');
-    
+app.post('/api/projects/add', async (req, res) => {
     try {
-        const today = new Date();
-        const oneMonthFromNow = new Date();
-        oneMonthFromNow.setMonth(today.getMonth() + 1);
-
-        // Find projects expiring exactly 30 days from now that haven't received a reminder
-        const expiringProjects = await Project.find({
-            expiryDate: {
-                $gte: new Date(oneMonthFromNow.setHours(0, 0, 0, 0)),
-                $lte: new Date(oneMonthFromNow.setHours(23, 59, 59, 999))
-            },
-            reminderSent: false
-        });
-
-        if (expiringProjects.length === 0) {
-            console.log('ℹ️ No projects require renewal reminders today.');
-            return;
-        }
-
-        for (const project of expiringProjects) {
-            const { data, error } = await resend.emails.send({
-                from: 'Insurance Tracker <onboarding@resend.dev>',
-                to: [project.officerEmail],
-                cc: [project.directorEmail],
-                subject: `⚠️ Action Required: Insurance Renewal for ${project.projectName}`,
-                html: `
-                    <div style="font-family: sans-serif; line-height: 1.5; color: #333;">
-                        <h2>Insurance Renewal Reminder</h2>
-                        <p>This is an automated notification that the insurance coverage for <strong>${project.projectName}</strong> is due for renewal in 30 days.</p>
-                        <hr />
-                        <p><strong>Policy Details:</strong></p>
-                        <ul>
-                            <li><strong>Policy Number:</strong> ${project.policyNumber}</li>
-                            <li><strong>Expiry Date:</strong> ${new Date(project.expiryDate).toDateString()}</li>
-                        </ul>
-                        <p>Please ensure the renewal is processed to avoid a lapse in coverage.</p>
-                        <br />
-                        <p><small>This is a system-generated email sent to the Officer and Director.</small></p>
-                    </div>
-                `
-            });
-
-            if (error) {
-                console.error(`❌ Failed to send email for ${project.projectName}:`, error);
-            } else {
-                // Update database so we don't send duplicate emails tomorrow
-                project.reminderSent = true;
-                await project.save();
-                console.log(`📧 Reminder sent to ${project.officerEmail} (CC: ${project.directorEmail})`);
-            }
-        }
+        console.log("Incoming Data:", req.body); // Check your terminal for this!
+        const newProject = new Project(req.body);
+        const saved = await newProject.save();
+        res.status(201).json(saved);
     } catch (err) {
-        console.error('❌ Automation Task Error:', err);
+        console.error("Validation Error:", err.message); // This tells you exactly what failed
+        res.status(400).json({ error: err.message });
     }
 });
 
-// Start Server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`🚀 Server is humming along on port ${PORT}`);
+app.get('/api/projects/all', async (req, res) => {
+    try {
+        const projects = await Project.find().sort({ expiryDate: 1 });
+        res.json(projects);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
+
+app.delete('/api/projects/:id', async (req, res) => {
+    try {
+        await Project.findByIdAndDelete(req.params.id);
+        res.json({ message: "Deleted" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+cron.schedule('0 9 * * *', async () => {
+    const oneMonthFromNow = new Date();
+    oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+
+    const expiring = await Project.find({
+        expiryDate: {
+            $gte: new Date(oneMonthFromNow.setHours(0,0,0,0)),
+            $lte: new Date(oneMonthFromNow.setHours(23,59,59,999))
+        },
+        reminderSent: false
+    });
+
+    for (const project of expiring) {
+        await resend.emails.send({
+            from: 'Insurance Tracker <onboarding@resend.dev>',
+            to: [project.officerEmail],
+            cc: [project.directorEmail],
+            subject: `Action Required: Renewal for ${project.borrowerName}`,
+            html: `<p>Insurance for <b>${project.borrowerName}</b> expires on ${project.expiryDate.toDateString()}. Please renew.</p>`
+        });
+        project.reminderSent = true;
+        await project.save();
+    }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`🚀 Server on ${PORT}`));

@@ -1,46 +1,87 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { X } from 'lucide-react';
 
-const AddProject = ({ onProjectAdded }) => {
+const AddProject = ({ onProjectAdded, onCancel }) => {
   const [formData, setFormData] = useState({
-    projectName: '',
-    policyNumber: '',
-    officerEmail: '',
-    directorEmail: '',
-    startDate: '',
-    expiryDate: ''
+    borrowerName: '', approvedLoan: '', outstandingLoan: '',
+    listFixedAsset: '', isInsured: 'Yes', assetCode: '',
+    estimatedValueCollateral: '', estimationDate: '', sumInsured: '',
+    insuredDate: '', expiryDate: '', typeInsurancePolicy: '',
+    isDBEBeneficiary: 'No', insuranceCompany: '',
+    officerEmail: '', directorEmail: ''
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (new Date(formData.expiryDate) <= new Date(formData.insuredDate)) {
+      alert("Error: Expiry date must be after the Insured date.");
+      return;
+    }
+
+    // Convert string inputs to Numbers for the backend
+    const cleanedData = {
+      ...formData,
+      approvedLoan: Number(formData.approvedLoan),
+      outstandingLoan: Number(formData.outstandingLoan),
+      sumInsured: formData.sumInsured ? Number(formData.sumInsured) : 0,
+      estimatedValueCollateral: formData.estimatedValueCollateral ? Number(formData.estimatedValueCollateral) : 0,
+      // Ensure dates aren't empty strings if they are optional
+      estimationDate: formData.estimationDate || null
+    };
+
     try {
-      await axios.post('http://localhost:5000/api/projects/add', formData);
-      alert('Project Registered Successfully!');
-      setFormData({ projectName: '', policyNumber: '', officerEmail: '', directorEmail: '', startDate: '', expiryDate: '' });
-      onProjectAdded(); // Refresh the list
+      await axios.post('http://localhost:5000/api/projects/add', cleanedData);
+      alert('Project Registered Successfully');
+      onProjectAdded();
     } catch (err) {
-      console.error(err);
-      alert('Error saving project.');
+      console.error("Submission Error:", err.response?.data || err.message);
+      alert(`Submission Failed: ${err.response?.data?.error || "Check backend console"}`);
     }
   };
 
+  const inputStyle = "w-full border border-gray-300 p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none";
+  const labelStyle = "text-[11px] font-bold text-slate-500 uppercase mb-1 block";
+
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-      <h2 className="text-xl font-bold mb-4 text-slate-700">Register New Insurance</h2>
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <input type="text" placeholder="Project Name" className="border p-2 rounded" value={formData.projectName} onChange={(e) => setFormData({...formData, projectName: e.target.value})} required />
-        <input type="text" placeholder="Policy Number" className="border p-2 rounded" value={formData.policyNumber} onChange={(e) => setFormData({...formData, policyNumber: e.target.value})} required />
-        <input type="email" placeholder="Officer Email" className="border p-2 rounded" value={formData.officerEmail} onChange={(e) => setFormData({...formData, officerEmail: e.target.value})} required />
-        <input type="email" placeholder="Director Email (CC)" className="border p-2 rounded" value={formData.directorEmail} onChange={(e) => setFormData({...formData, directorEmail: e.target.value})} required />
-        <div>
-          <label className="text-xs text-gray-500 block">Start Date</label>
-          <input type="date" className="border p-2 rounded w-full" value={formData.startDate} onChange={(e) => setFormData({...formData, startDate: e.target.value})} required />
+    <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 relative">
+      <button onClick={onCancel} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={24} /></button>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="space-y-3">
+            <h3 className="text-blue-600 font-bold text-xs border-b pb-1">1. LOAN</h3>
+            <div><label className={labelStyle}>Borrower</label><input className={inputStyle} value={formData.borrowerName} onChange={(e) => setFormData({...formData, borrowerName: e.target.value})} required /></div>
+            <div><label className={labelStyle}>Approved Amt</label><input type="number" className={inputStyle} value={formData.approvedLoan} onChange={(e) => setFormData({...formData, approvedLoan: e.target.value})} required /></div>
+            <div><label className={labelStyle}>Outstanding</label><input type="number" className={inputStyle} value={formData.outstandingLoan} onChange={(e) => setFormData({...formData, outstandingLoan: e.target.value})} required /></div>
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-blue-600 font-bold text-xs border-b pb-1">2. ASSET</h3>
+            <div><label className={labelStyle}>Fixed Asset</label><input className={inputStyle} value={formData.listFixedAsset} onChange={(e) => setFormData({...formData, listFixedAsset: e.target.value})} required /></div>
+            <div><label className={labelStyle}>Asset Code</label><input className={inputStyle} value={formData.assetCode} onChange={(e) => setFormData({...formData, assetCode: e.target.value})} /></div>
+            <div><label className={labelStyle}>Sum Insured</label><input type="number" className={inputStyle} value={formData.sumInsured} onChange={(e) => setFormData({...formData, sumInsured: e.target.value})} /></div>
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-blue-600 font-bold text-xs border-b pb-1">3. POLICY</h3>
+            <div><label className={labelStyle}>Company</label><input className={inputStyle} value={formData.insuranceCompany} onChange={(e) => setFormData({...formData, insuranceCompany: e.target.value})} /></div>
+            <div><label className={labelStyle}>DBE Beneficiary?</label>
+              <select className={inputStyle} value={formData.isDBEBeneficiary} onChange={(e) => setFormData({...formData, isDBEBeneficiary: e.target.value})}>
+                <option value="No">No</option><option value="Yes">Yes</option>
+              </select>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-blue-600 font-bold text-xs border-b pb-1">4. CONTACT</h3>
+            <div><label className={labelStyle}>Insured Date</label><input type="date" className={inputStyle} value={formData.insuredDate} onChange={(e) => setFormData({...formData, insuredDate: e.target.value})} required /></div>
+            <div><label className={labelStyle}>Expiry Date</label><input type="date" className={inputStyle} value={formData.expiryDate} onChange={(e) => setFormData({...formData, expiryDate: e.target.value})} required /></div>
+            <div><label className={labelStyle}>Officer Email</label><input type="email" className={inputStyle} value={formData.officerEmail} onChange={(e) => setFormData({...formData, officerEmail: e.target.value})} required /></div>
+            <div><label className={labelStyle}>Director Email</label><input type="email" className={inputStyle} value={formData.directorEmail} onChange={(e) => setFormData({...formData, directorEmail: e.target.value})} required /></div>
+          </div>
         </div>
-        <div>
-          <label className="text-xs text-gray-500 block">Expiry Date</label>
-          <input type="date" className="border p-2 rounded w-full" value={formData.expiryDate} onChange={(e) => setFormData({...formData, expiryDate: e.target.value})} required />
+        <div className="mt-8 flex gap-4">
+          <button type="submit" className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">Save Information</button>
+          <button type="button" onClick={onCancel} className="px-6 bg-gray-100 text-gray-600 rounded-lg">Cancel</button>
         </div>
-        <button type="submit" className="md:col-span-2 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition">Save Project</button>
       </form>
     </div>
   );
