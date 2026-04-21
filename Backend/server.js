@@ -3,32 +3,55 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const cron = require('node-cron');
 const { Resend } = require('resend');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
-const projectSchema = new mongoose.Schema({
-    borrowerName: { type: String, required: true },
-    approvedLoan: { type: Number, required: true },
-    outstandingLoan: { type: Number, required: true },
-    listFixedAsset: { type: String, required: true },
-    isInsured: { type: String, default: 'Yes' },
-    assetCode: { type: String, default: '' }, // Made optional
-    estimatedValueCollateral: { type: Number, default: 0 }, // Made optional
-    estimationDate: { type: Date }, // Made optional
-    sumInsured: { type: Number, default: 0 },
-    insuredDate: { type: Date, required: true },
-    expiryDate: { type: Date, required: true },
-    typeInsurancePolicy: { type: String, default: '' },
-    isDBEBeneficiary: { type: String, default: 'No' },
-    insuranceCompany: { type: String, default: '' },
-    officerEmail: { type: String, required: true },
-    directorEmail: { type: String, required: true },
-    reminderSent: { type: Boolean, default: false }
-}, { timestamps: true });
-
-const Project = mongoose.model('Project', projectSchema);
+// Models
+const Project = require('./models/project');
+const User = require('./models/User');
 
 const app = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+const ExcelJS = require('exceljs');
+
+app.get('/api/projects/export', async (req, res) => {
+    try {
+        const projects = await Project.find().sort({ expiryDate: 1 });
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Insurance Tracker');
+
+        worksheet.columns = [
+            { header: 'Borrower Name', key: 'borrowerName', width: 25 },
+            { header: 'Asset', key: 'listFixedAsset', width: 20 },
+            { header: 'Asset Code', key: 'assetCode', width: 15 },
+            { header: 'Expiry Date', key: 'expiryDate', width: 15 },
+            { header: 'Sum Insured', key: 'sumInsured', width: 15 },
+            { header: 'Responsible Officer', key: 'officerEmail', width: 25 },
+            { header: 'Status', key: 'status', width: 15 }
+        ];
+
+        projects.forEach(p => {
+            const days = Math.ceil((new Date(p.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
+            worksheet.addRow({
+                borrowerName: p.borrowerName,
+                listFixedAsset: p.listFixedAsset,
+                assetCode: p.assetCode,
+                expiryDate: new Date(p.expiryDate).toDateString(),
+                sumInsured: p.sumInsured,
+                officerEmail: p.officerEmail,
+                status: days < 0 ? 'EXPIRED' : (days <= 60 ? 'CRITICAL' : 'ACTIVE')
+            });
+        });
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=Insurance_Report.xlsx');
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 app.use(cors());
 app.use(express.json());
@@ -37,18 +60,40 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ Database Connected"))
     .catch(err => console.error("❌ Connection Error:", err));
 
-app.post('/api/projects/add', async (req, res) => {
+// --- AUTHENTICATION ROUTES ---
+
+app.post('/api/auth/register', async (req, res) => {
     try {
-        console.log("Incoming Data:", req.body); // Check your terminal for this!
-        const newProject = new Project(req.body);
-        const saved = await newProject.save();
-        res.status(201).json(saved);
+        const { name, email, password, role } = req.body;
+        const user = new User({ name, email, password, role });
+        await user.save();
+        res.status(201).json({ message: "User registered successfully" });
     } catch (err) {
-        console.error("Validation Error:", err.message); // This tells you exactly what failed
         res.status(400).json({ error: err.message });
     }
 });
 
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await User.findOne({ email });
+        if (!user || !(await user.comparePassword(password))) {
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+        const token = jwt.sign(
+            { id: user._id, role: user.role }, 
+            process.env.JWT_SECRET || 'secret_local_key', 
+            { expiresIn: '8h' }
+        );
+        res.json({ token, role: user.role, name: user.name });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- PROJECT ROUTES ---
+
+// GET: All projects (Director sees summary, Officer sees full list in UI logic)
 app.get('/api/projects/all', async (req, res) => {
     try {
         const projects = await Project.find().sort({ expiryDate: 1 });
@@ -58,6 +103,32 @@ app.get('/api/projects/all', async (req, res) => {
     }
 });
 
+// POST: Add new project (Officer only logic)
+app.post('/api/projects/add', async (req, res) => {
+    try {
+        const newProject = new Project(req.body);
+        const saved = await newProject.save();
+        res.status(201).json(saved);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// PUT: Edit existing project (New functionality)
+app.put('/api/projects/update/:id', async (req, res) => {
+    try {
+        const updatedProject = await Project.findByIdAndUpdate(
+            req.params.id, 
+            req.body, 
+            { new: true, runValidators: true }
+        );
+        res.json(updatedProject);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// DELETE: Remove project
 app.delete('/api/projects/:id', async (req, res) => {
     try {
         await Project.findByIdAndDelete(req.params.id);
@@ -67,27 +138,57 @@ app.delete('/api/projects/:id', async (req, res) => {
     }
 });
 
-cron.schedule('0 9 * * *', async () => {
-    const oneMonthFromNow = new Date();
-    oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+// --- REMINDER CRON JOB (Daily at 9:00 AM) ---
 
-    const expiring = await Project.find({
+cron.schedule('0 9 * * *', async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 1. Check for 60-day reminders
+    const date60Days = new Date(today);
+    date60Days.setDate(today.getDate() + 60);
+
+    const expiring60 = await Project.find({
         expiryDate: {
-            $gte: new Date(oneMonthFromNow.setHours(0,0,0,0)),
-            $lte: new Date(oneMonthFromNow.setHours(23,59,59,999))
+            $gte: new Date(date60Days.setHours(0,0,0,0)),
+            $lte: new Date(date60Days.setHours(23,59,59,999))
         },
-        reminderSent: false
+        reminder60DaysSent: false
     });
 
-    for (const project of expiring) {
+    for (const project of expiring60) {
         await resend.emails.send({
             from: 'Insurance Tracker <onboarding@resend.dev>',
             to: [project.officerEmail],
             cc: [project.directorEmail],
-            subject: `Action Required: Renewal for ${project.borrowerName}`,
-            html: `<p>Insurance for <b>${project.borrowerName}</b> expires on ${project.expiryDate.toDateString()}. Please renew.</p>`
+            subject: `60-Day Notice: Renewal for ${project.borrowerName}`,
+            html: `<p><b>60-Day Advance Warning:</b> Insurance for <b>${project.borrowerName}</b> expires on ${project.expiryDate.toDateString()}.</p>`
         });
-        project.reminderSent = true;
+        project.reminder60DaysSent = true;
+        await project.save();
+    }
+
+    // 2. Check for 30-day reminders
+    const date30Days = new Date(today);
+    date30Days.setDate(today.getDate() + 30);
+
+    const expiring30 = await Project.find({
+        expiryDate: {
+            $gte: new Date(date30Days.setHours(0,0,0,0)),
+            $lte: new Date(date30Days.setHours(23,59,59,999))
+        },
+        reminder30DaysSent: false
+    });
+
+    for (const project of expiring30) {
+        await resend.emails.send({
+            from: 'Insurance Tracker <onboarding@resend.dev>',
+            to: [project.officerEmail],
+            cc: [project.directorEmail],
+            subject: `30-Day Notice: Renewal for ${project.borrowerName}`,
+            html: `<p><b>Final 30-Day Notice:</b> Insurance for <b>${project.borrowerName}</b> expires on ${project.expiryDate.toDateString()}. Action required immediately.</p>`
+        });
+        project.reminder30DaysSent = true;
         await project.save();
     }
 });

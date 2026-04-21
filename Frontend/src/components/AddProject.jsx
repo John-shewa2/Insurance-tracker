@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { X } from 'lucide-react';
 
-const AddProject = ({ onProjectAdded, onCancel }) => {
+const AddProject = ({ onProjectAdded, onCancel, projectToEdit }) => {
   const [formData, setFormData] = useState({
     borrowerName: '', approvedLoan: '', outstandingLoan: '',
     listFixedAsset: '', isInsured: 'Yes', assetCode: '',
@@ -12,6 +12,20 @@ const AddProject = ({ onProjectAdded, onCancel }) => {
     officerEmail: '', directorEmail: ''
   });
 
+  // Populate form if we are editing
+  useEffect(() => {
+    if (projectToEdit) {
+      // Format dates correctly for input[type="date"]
+      const formatDate = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
+      setFormData({
+        ...projectToEdit,
+        estimationDate: formatDate(projectToEdit.estimationDate),
+        insuredDate: formatDate(projectToEdit.insuredDate),
+        expiryDate: formatDate(projectToEdit.expiryDate)
+      });
+    }
+  }, [projectToEdit]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -20,20 +34,23 @@ const AddProject = ({ onProjectAdded, onCancel }) => {
       return;
     }
 
-    // Convert string inputs to Numbers for the backend
     const cleanedData = {
       ...formData,
       approvedLoan: Number(formData.approvedLoan),
       outstandingLoan: Number(formData.outstandingLoan),
       sumInsured: formData.sumInsured ? Number(formData.sumInsured) : 0,
       estimatedValueCollateral: formData.estimatedValueCollateral ? Number(formData.estimatedValueCollateral) : 0,
-      // Ensure dates aren't empty strings if they are optional
       estimationDate: formData.estimationDate || null
     };
 
     try {
-      await axios.post('http://localhost:5000/api/projects/add', cleanedData);
-      alert('Project Registered Successfully');
+      if (projectToEdit) {
+        await axios.put(`http://localhost:5000/api/projects/update/${projectToEdit._id}`, cleanedData);
+        alert('Information Updated Successfully');
+      } else {
+        await axios.post('http://localhost:5000/api/projects/add', cleanedData);
+        alert('Project Registered Successfully');
+      }
       onProjectAdded();
     } catch (err) {
       console.error("Submission Error:", err.response?.data || err.message);
@@ -46,7 +63,10 @@ const AddProject = ({ onProjectAdded, onCancel }) => {
 
   return (
     <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 relative">
-      <button onClick={onCancel} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={24} /></button>
+      <button onClick={onCancel} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+        <X size={24} />
+      </button>
+      <h2 className="text-xl font-bold text-slate-800 mb-6">{projectToEdit ? 'Edit Information' : 'New Registration'}</h2>
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-3">
@@ -58,7 +78,7 @@ const AddProject = ({ onProjectAdded, onCancel }) => {
           <div className="space-y-3">
             <h3 className="text-blue-600 font-bold text-xs border-b pb-1">2. ASSET</h3>
             <div><label className={labelStyle}>Fixed Asset</label><input className={inputStyle} value={formData.listFixedAsset} onChange={(e) => setFormData({...formData, listFixedAsset: e.target.value})} required /></div>
-            <div><label className={labelStyle}>Asset Code</label><input className={inputStyle} value={formData.assetCode} onChange={(e) => setFormData({...formData, assetCode: e.target.value})} /></div>
+            <div><label className={labelStyle}>Asset Code</label><input className={inputStyle} value={formData.assetCode} onChange={(e) => setFormData({...formData, assetCode: e.target.value})} required /></div>
             <div><label className={labelStyle}>Sum Insured</label><input type="number" className={inputStyle} value={formData.sumInsured} onChange={(e) => setFormData({...formData, sumInsured: e.target.value})} /></div>
           </div>
           <div className="space-y-3">
@@ -79,8 +99,10 @@ const AddProject = ({ onProjectAdded, onCancel }) => {
           </div>
         </div>
         <div className="mt-8 flex gap-4">
-          <button type="submit" className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">Save Information</button>
-          <button type="button" onClick={onCancel} className="px-6 bg-gray-100 text-gray-600 rounded-lg">Cancel</button>
+          <button type="submit" className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition transform active:scale-95 shadow-lg shadow-blue-200">
+            {projectToEdit ? 'Update Changes' : 'Save Information'}
+          </button>
+          <button type="button" onClick={onCancel} className="px-6 bg-gray-100 text-gray-600 rounded-lg font-bold hover:bg-gray-200 transition">Cancel</button>
         </div>
       </form>
     </div>
