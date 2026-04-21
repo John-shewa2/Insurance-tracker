@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cron = require('node-cron');
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const ExcelJS = require('exceljs');
 require('dotenv').config();
@@ -12,7 +12,6 @@ const Project = require('./models/project');
 const User = require('./models/User');
 
 const app = express();
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -21,6 +20,21 @@ app.use(express.json());
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ Database Connected"))
     .catch(err => console.error("❌ Connection Error:", err));
+
+// --- NODEMAILER CONFIGURATION ---
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER, // Your Gmail address (e.g., yourname@gmail.com)
+    pass: process.env.EMAIL_PASS  // Your 16-character App Password
+  }
+});
+
+// Verify email connection on start
+transporter.verify((error, success) => {
+  if (error) console.error("❌ Email Auth Failed:", error);
+  else console.log("📧 Email Server Ready");
+});
 
 // --- AUTHENTICATION ROUTES ---
 
@@ -55,7 +69,6 @@ app.post('/api/auth/login', async (req, res) => {
 
 // --- PROJECT ROUTES ---
 
-// GET: All projects
 app.get('/api/projects/all', async (req, res) => {
     try {
         const projects = await Project.find().sort({ expiryDate: 1 });
@@ -65,7 +78,6 @@ app.get('/api/projects/all', async (req, res) => {
     }
 });
 
-// POST: Add new project
 app.post('/api/projects/add', async (req, res) => {
     try {
         const newProject = new Project(req.body);
@@ -76,7 +88,6 @@ app.post('/api/projects/add', async (req, res) => {
     }
 });
 
-// PUT: Update project
 app.put('/api/projects/update/:id', async (req, res) => {
     try {
         const updatedProject = await Project.findByIdAndUpdate(
@@ -90,7 +101,6 @@ app.put('/api/projects/update/:id', async (req, res) => {
     }
 });
 
-// DELETE: Remove project
 app.delete('/api/projects/:id', async (req, res) => {
     try {
         await Project.findByIdAndDelete(req.params.id);
@@ -116,7 +126,8 @@ app.get('/api/projects/export', async (req, res) => {
             { header: 'Expiry Date', key: 'expiryDate', width: 15 },
             { header: 'Sum Insured', key: 'sumInsured', width: 15 },
             { header: 'Responsible Officer', key: 'officerEmail', width: 25 },
-            { header: 'Status', key: 'status', width: 15 }
+            { header: 'Status', key: 'status', width: 15 },
+            { header: 'Remark', key: 'remark', width: 30 }
         ];
 
         projects.forEach(p => {
@@ -129,7 +140,8 @@ app.get('/api/projects/export', async (req, res) => {
                 expiryDate: new Date(p.expiryDate).toDateString(),
                 sumInsured: p.sumInsured,
                 officerEmail: p.officerEmail,
-                status: days < 0 ? 'EXPIRED' : (days <= 60 ? 'CRITICAL' : 'ACTIVE')
+                status: days < 0 ? 'EXPIRED' : (days <= 60 ? 'CRITICAL' : 'ACTIVE'),
+                remark: p.remark || ''
             });
         });
 
@@ -144,57 +156,53 @@ app.get('/api/projects/export', async (req, res) => {
 
 // --- REMINDER CRON JOB (Daily at 9:00 AM) ---
 
-cron.schedule('0 9 * * *', async () => {
+cron.schedule('* * * * *', async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 1. Check for 60-day reminders
-    const date60Days = new Date(today);
-    date60Days.setDate(today.getDate() + 60);
+    const checkAndSend = async (daysOut, flagField, subjectPrefix) => {
+        const targetDate = new Date(today);
+        targetDate.setDate(today.getDate() + daysOut);
 
-    const expiring60 = await Project.find({
-        expiryDate: {
-            $gte: new Date(date60Days.setHours(0,0,0,0)),
-            $lte: new Date(date60Days.setHours(23,59,59,999))
-        },
-        reminder60DaysSent: false
-    });
-
-    for (const project of expiring60) {
-        await resend.emails.send({
-            from: 'Insurance Tracker <onboarding@resend.dev>',
-            to: [project.officerEmail],
-            cc: [project.directorEmail],
-            subject: `60-Day Notice: Renewal for ${project.borrowerName}`,
-            html: `<p><b>60-Day Advance Warning:</b> Insurance for <b>${project.borrowerName}</b> expires on ${project.expiryDate.toDateString()}.</p>`
+        const expiring = await Project.find({
+            expiryDate: {
+                $gte: new Date(targetDate.setHours(0,0,0,0)),
+                $lte: new Date(targetDate.setHours(23,59,59,999))
+            },
+            [flagField]: false
         });
-        project.reminder60DaysSent = true;
-        await project.save();
-    }
 
-    // 2. Check for 30-day reminders
-    const date30Days = new Date(today);
-    date30Days.setDate(today.getDate() + 30);
+        for (const project of expiring) {
+            try {
+                const mailOptions = {
+                    from: `"Insurance Portal" <${process.env.EMAIL_USER}>`,
+                    to: project.officerEmail,
+                    cc: project.directorEmail,
+                    subject: `${subjectPrefix}: Renewal for ${project.borrowerName}`,
+                    html: `
+                        <h3>Insurance Renewal Notice</h3>
+                        <p>This is an automated reminder that the insurance coverage for <b>${project.borrowerName}</b> is approaching expiry.</p>
+                        <ul>
+                            <li><b>Asset:</b> ${project.listFixedAsset}</li>
+                            <li><b>Asset Code:</b> ${project.assetCode}</li>
+                            <li><b>Expiry Date:</b> ${new Date(project.expiryDate).toDateString()}</li>
+                        </ul>
+                        <p>Please take the necessary steps to renew the policy.</p>
+                    `
+                };
 
-    const expiring30 = await Project.find({
-        expiryDate: {
-            $gte: new Date(date30Days.setHours(0,0,0,0)),
-            $lte: new Date(date30Days.setHours(23,59,59,999))
-        },
-        reminder30DaysSent: false
-    });
+                await transporter.sendMail(mailOptions);
+                project[flagField] = true;
+                await project.save();
+                console.log(`✅ Email sent for ${project.borrowerName}`);
+            } catch (err) {
+                console.error(`❌ Email error for ${project.borrowerName}:`, err.message);
+            }
+        }
+    };
 
-    for (const project of expiring30) {
-        await resend.emails.send({
-            from: 'Insurance Tracker <onboarding@resend.dev>',
-            to: [project.officerEmail],
-            cc: [project.directorEmail],
-            subject: `30-Day Notice: Renewal for ${project.borrowerName}`,
-            html: `<p><b>Final 30-Day Notice:</b> Insurance for <b>${project.borrowerName}</b> expires on ${project.expiryDate.toDateString()}. Action required immediately.</p>`
-        });
-        project.reminder30DaysSent = true;
-        await project.save();
-    }
+    await checkAndSend(60, 'reminder60DaysSent', '60-Day Notice');
+    await checkAndSend(30, 'reminder30DaysSent', '30-Day Notice');
 });
 
 const PORT = process.env.PORT || 5000;
