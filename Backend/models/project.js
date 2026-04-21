@@ -3,13 +3,11 @@ const mongoose = require('mongoose');
 const projectSchema = new mongoose.Schema({
     borrowerName: { type: String, required: true, trim: true },
     approvedLoan: { type: Number, required: true, min: 0 },
-    outstandingLoan: { type: Number, required: true, min: 0 },
     listFixedAsset: { type: String, required: true },
-    isInsured: { type: String, enum: ['Yes', 'No'], default: 'Yes' },
     assetCode: { 
         type: String, 
         unique: true, 
-        sparse: true, // Allows nulls to be unique if assetCode is optional
+        sparse: true, 
         required: true,
         trim: true 
     },
@@ -23,8 +21,9 @@ const projectSchema = new mongoose.Schema({
     insuranceCompany: { type: String, default: '' },
     officerEmail: { type: String, required: true },
     directorEmail: { type: String, required: true },
-    reminder60DaysSent: { type: Boolean, default: false }, // New 60-day tracker
-    reminder30DaysSent: { type: Boolean, default: false }  // Replaced old reminderSent
+    remark: { type: String, default: '' },
+    reminder60DaysSent: { type: Boolean, default: false },
+    reminder30DaysSent: { type: Boolean, default: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Project', projectSchema);

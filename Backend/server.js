@@ -4,6 +4,7 @@ const cors = require('cors');
 const cron = require('node-cron');
 const { Resend } = require('resend');
 const jwt = require('jsonwebtoken');
+const ExcelJS = require('exceljs');
 require('dotenv').config();
 
 // Models
@@ -13,49 +14,10 @@ const User = require('./models/User');
 const app = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const ExcelJS = require('exceljs');
-
-app.get('/api/projects/export', async (req, res) => {
-    try {
-        const projects = await Project.find().sort({ expiryDate: 1 });
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Insurance Tracker');
-
-        worksheet.columns = [
-            { header: 'Borrower Name', key: 'borrowerName', width: 25 },
-            { header: 'Asset', key: 'listFixedAsset', width: 20 },
-            { header: 'Asset Code', key: 'assetCode', width: 15 },
-            { header: 'Expiry Date', key: 'expiryDate', width: 15 },
-            { header: 'Sum Insured', key: 'sumInsured', width: 15 },
-            { header: 'Responsible Officer', key: 'officerEmail', width: 25 },
-            { header: 'Status', key: 'status', width: 15 }
-        ];
-
-        projects.forEach(p => {
-            const days = Math.ceil((new Date(p.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
-            worksheet.addRow({
-                borrowerName: p.borrowerName,
-                listFixedAsset: p.listFixedAsset,
-                assetCode: p.assetCode,
-                expiryDate: new Date(p.expiryDate).toDateString(),
-                sumInsured: p.sumInsured,
-                officerEmail: p.officerEmail,
-                status: days < 0 ? 'EXPIRED' : (days <= 60 ? 'CRITICAL' : 'ACTIVE')
-            });
-        });
-
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=Insurance_Report.xlsx');
-        await workbook.xlsx.write(res);
-        res.end();
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 app.use(cors());
 app.use(express.json());
 
+// Database Connection
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ Database Connected"))
     .catch(err => console.error("❌ Connection Error:", err));
@@ -93,7 +55,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // --- PROJECT ROUTES ---
 
-// GET: All projects (Director sees summary, Officer sees full list in UI logic)
+// GET: All projects
 app.get('/api/projects/all', async (req, res) => {
     try {
         const projects = await Project.find().sort({ expiryDate: 1 });
@@ -103,7 +65,7 @@ app.get('/api/projects/all', async (req, res) => {
     }
 });
 
-// POST: Add new project (Officer only logic)
+// POST: Add new project
 app.post('/api/projects/add', async (req, res) => {
     try {
         const newProject = new Project(req.body);
@@ -114,7 +76,7 @@ app.post('/api/projects/add', async (req, res) => {
     }
 });
 
-// PUT: Edit existing project (New functionality)
+// PUT: Update project
 app.put('/api/projects/update/:id', async (req, res) => {
     try {
         const updatedProject = await Project.findByIdAndUpdate(
@@ -133,6 +95,48 @@ app.delete('/api/projects/:id', async (req, res) => {
     try {
         await Project.findByIdAndDelete(req.params.id);
         res.json({ message: "Deleted" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- EXPORT TO EXCEL ---
+
+app.get('/api/projects/export', async (req, res) => {
+    try {
+        const projects = await Project.find().sort({ expiryDate: 1 });
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Insurance Tracker');
+
+        worksheet.columns = [
+            { header: 'Borrower Name', key: 'borrowerName', width: 25 },
+            { header: 'Approved Loan', key: 'approvedLoan', width: 15 },
+            { header: 'Asset', key: 'listFixedAsset', width: 20 },
+            { header: 'Asset Code', key: 'assetCode', width: 15 },
+            { header: 'Expiry Date', key: 'expiryDate', width: 15 },
+            { header: 'Sum Insured', key: 'sumInsured', width: 15 },
+            { header: 'Responsible Officer', key: 'officerEmail', width: 25 },
+            { header: 'Status', key: 'status', width: 15 }
+        ];
+
+        projects.forEach(p => {
+            const days = Math.ceil((new Date(p.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
+            worksheet.addRow({
+                borrowerName: p.borrowerName,
+                approvedLoan: p.approvedLoan,
+                listFixedAsset: p.listFixedAsset,
+                assetCode: p.assetCode,
+                expiryDate: new Date(p.expiryDate).toDateString(),
+                sumInsured: p.sumInsured,
+                officerEmail: p.officerEmail,
+                status: days < 0 ? 'EXPIRED' : (days <= 60 ? 'CRITICAL' : 'ACTIVE')
+            });
+        });
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=Insurance_Report.xlsx');
+        await workbook.xlsx.write(res);
+        res.end();
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

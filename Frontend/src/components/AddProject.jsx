@@ -4,24 +4,23 @@ import { X } from 'lucide-react';
 
 const AddProject = ({ onProjectAdded, onCancel, projectToEdit }) => {
   const [formData, setFormData] = useState({
-    borrowerName: '', approvedLoan: '', outstandingLoan: '',
+    borrowerName: '', approvedLoan: '', 
     listFixedAsset: '', isInsured: 'Yes', assetCode: '',
     estimatedValueCollateral: '', estimationDate: '', sumInsured: '',
     insuredDate: '', expiryDate: '', typeInsurancePolicy: '',
     isDBEBeneficiary: 'No', insuranceCompany: '',
-    officerEmail: '', directorEmail: ''
+    officerEmail: '', directorEmail: '', remark: ''
   });
 
-  // Populate form if we are editing
   useEffect(() => {
     if (projectToEdit) {
-      // Format dates correctly for input[type="date"]
       const formatDate = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
       setFormData({
         ...projectToEdit,
         estimationDate: formatDate(projectToEdit.estimationDate),
         insuredDate: formatDate(projectToEdit.insuredDate),
-        expiryDate: formatDate(projectToEdit.expiryDate)
+        expiryDate: formatDate(projectToEdit.expiryDate),
+        remark: projectToEdit.remark || ''
       });
     }
   }, [projectToEdit]);
@@ -37,7 +36,6 @@ const AddProject = ({ onProjectAdded, onCancel, projectToEdit }) => {
     const cleanedData = {
       ...formData,
       approvedLoan: Number(formData.approvedLoan),
-      outstandingLoan: Number(formData.outstandingLoan),
       sumInsured: formData.sumInsured ? Number(formData.sumInsured) : 0,
       estimatedValueCollateral: formData.estimatedValueCollateral ? Number(formData.estimatedValueCollateral) : 0,
       estimationDate: formData.estimationDate || null
@@ -73,7 +71,6 @@ const AddProject = ({ onProjectAdded, onCancel, projectToEdit }) => {
             <h3 className="text-blue-600 font-bold text-xs border-b pb-1">1. LOAN</h3>
             <div><label className={labelStyle}>Borrower</label><input className={inputStyle} value={formData.borrowerName} onChange={(e) => setFormData({...formData, borrowerName: e.target.value})} required /></div>
             <div><label className={labelStyle}>Approved Amt</label><input type="number" className={inputStyle} value={formData.approvedLoan} onChange={(e) => setFormData({...formData, approvedLoan: e.target.value})} required /></div>
-            <div><label className={labelStyle}>Outstanding</label><input type="number" className={inputStyle} value={formData.outstandingLoan} onChange={(e) => setFormData({...formData, outstandingLoan: e.target.value})} required /></div>
           </div>
           <div className="space-y-3">
             <h3 className="text-blue-600 font-bold text-xs border-b pb-1">2. ASSET</h3>
@@ -98,6 +95,17 @@ const AddProject = ({ onProjectAdded, onCancel, projectToEdit }) => {
             <div><label className={labelStyle}>Director Email</label><input type="email" className={inputStyle} value={formData.directorEmail} onChange={(e) => setFormData({...formData, directorEmail: e.target.value})} required /></div>
           </div>
         </div>
+        
+        <div className="mt-6">
+          <label className={labelStyle}>Remark / Additional Notes</label>
+          <textarea 
+            className={`${inputStyle} h-20 resize-none`} 
+            value={formData.remark} 
+            onChange={(e) => setFormData({...formData, remark: e.target.value})}
+            placeholder="e.g. Vehicle is in repair..."
+          />
+        </div>
+
         <div className="mt-8 flex gap-4">
           <button type="submit" className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition transform active:scale-95 shadow-lg shadow-blue-200">
             {projectToEdit ? 'Update Changes' : 'Save Information'}
