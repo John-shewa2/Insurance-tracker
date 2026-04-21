@@ -18,9 +18,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ DB Connected"))
-    .catch(err => console.error(err));
+mongoose.connect(process.env.MONGO_URI, {
+    family: 4 // Force the use of IPv4
+})
+.then(() => console.log("✅ DB Connected"))
+.catch(err => console.error("❌ DB Connection Error:", err));
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
