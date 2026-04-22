@@ -13,7 +13,24 @@ const User = require('./models/User');
 const app = express();
 
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        
+        const allowedPatterns = [
+            /^https:\/\/insurance-tracker.*\.vercel\.app$/, 
+            'http://localhost:5173'                         
+        ];
+
+        const isAllowed = allowedPatterns.some(pattern => 
+            typeof pattern === 'string' ? pattern === origin : pattern.test(origin)
+        );
+
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            callback(new Error('CORS Not Allowed'));
+        }
+    },
     credentials: true
 }));
 app.use(express.json());
