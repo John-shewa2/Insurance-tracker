@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import api from './api';
 import AddProject from './components/AddProject';
+import AddUser from './components/AddUser'; // New Component
 import ProjectList from './components/ProjectList';
 import Login from './components/Login';
-import { Plus, LogOut, LayoutDashboard, FileDown, Filter } from 'lucide-react';
+import { Plus, LogOut, LayoutDashboard, FileDown, Filter, UserPlus } from 'lucide-react';
 
 function App() {
   const [projects, setProjects] = useState([]);
   const [filteredProjects, setFilteredProjects] = useState([]);
   const [filterType, setFilterType] = useState('all');
   const [showForm, setShowForm] = useState(false);
+  const [showUserForm, setShowUserForm] = useState(false); // New State for Admin
   const [editingProject, setEditingProject] = useState(null);
   const [role, setRole] = useState(localStorage.getItem('role'));
   const [userName, setUserName] = useState(localStorage.getItem('userName'));
@@ -92,32 +94,53 @@ function App() {
             <button onClick={handleExport} className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-emerald-700">
               <FileDown size={18} /> Export Report
             </button>
+
+            {/* Admin-Only User Management Button */}
+            {role === 'Admin' && (
+              <button 
+                onClick={() => { setShowUserForm(true); setShowForm(false); }} 
+                className="flex items-center gap-2 bg-purple-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-purple-700 transition"
+              >
+                <UserPlus size={18} /> Manage Users
+              </button>
+            )}
+
             {role === 'Officer' && !showForm && (
-              <button onClick={() => { setEditingProject(null); setShowForm(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold">
+              <button onClick={() => { setEditingProject(null); setShowForm(true); setShowUserForm(false); }} className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold">
                 <Plus size={18} /> Add Record
               </button>
             )}
-            <button onClick={handleLogout} className="flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-2.5 rounded-xl font-bold hover:bg-slate-200">
+            
+            <button onClick={handleLogout} className="flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-2.5 rounded-xl font-bold hover:bg-slate-200 transition">
               <LogOut size={18} /> Logout
             </button>
           </div>
         </header>
 
+        {/* Dashboard Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <button onClick={() => applyFilter(projects, 'all')} className={`p-6 rounded-2xl border text-left bg-white ${filterType === 'all' && 'ring-2 ring-blue-500'}`}>
+          <button onClick={() => applyFilter(projects, 'all')} className={`p-6 rounded-2xl border text-left bg-white transition ${filterType === 'all' && 'ring-2 ring-blue-500'}`}>
             <div className="text-slate-500 text-xs font-bold uppercase">Total Policies</div>
             <div className="text-3xl font-black">{projects.length}</div>
           </button>
-          <button onClick={() => applyFilter(projects, 'critical')} className={`p-6 rounded-2xl border text-left bg-white border-l-4 border-l-orange-500 ${filterType === 'critical' && 'ring-2 ring-orange-500'}`}>
+          <button onClick={() => applyFilter(projects, 'critical')} className={`p-6 rounded-2xl border text-left bg-white border-l-4 border-l-orange-500 transition ${filterType === 'critical' && 'ring-2 ring-orange-500'}`}>
             <div className="text-orange-600 text-xs font-bold uppercase">Critical (60 Days)</div>
             <div className="text-3xl font-black">{criticalCount}</div>
           </button>
-          <button onClick={() => applyFilter(projects, 'expired')} className={`p-6 rounded-2xl border text-left bg-white border-l-4 border-l-red-500 ${filterType === 'expired' && 'ring-2 ring-red-500'}`}>
+          <button onClick={() => applyFilter(projects, 'expired')} className={`p-6 rounded-2xl border text-left bg-white border-l-4 border-l-red-500 transition ${filterType === 'expired' && 'ring-2 ring-red-500'}`}>
             <div className="text-red-600 text-xs font-bold uppercase">Expired</div>
             <div className="text-3xl font-black">{expiredCount}</div>
           </button>
         </div>
         
+        {/* Admin User Registration Form */}
+        {showUserForm && (
+          <div className="mb-12">
+            <AddUser onCancel={() => setShowUserForm(false)} />
+          </div>
+        )}
+
+        {/* Project Registration Form */}
         {showForm && (
           <div className="mb-12">
             <AddProject 

@@ -7,21 +7,19 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true },
     role: { 
         type: String, 
-        enum: ['Officer', 'Director'], 
+        enum: ['Officer', 'Director', 'Admin'], 
         default: 'Officer',
         required: true 
     }
 }, { timestamps: true });
 
-// Corrected: Removed the 'next' parameter for async middleware
 userSchema.pre('save', async function() {
     if (!this.isModified('password')) return;
-    
     try {
         const salt = await bcrypt.genSalt(10);
         this.password = await bcrypt.hash(this.password, salt);
     } catch (err) {
-        throw err; // In async hooks, throwing an error stops the save process
+        throw err;
     }
 });
 
