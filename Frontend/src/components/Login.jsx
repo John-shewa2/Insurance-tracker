@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../api'; // Use the centralized API config instead of direct axios
 
 const Login = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
@@ -9,7 +9,9 @@ const Login = ({ onLoginSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', { email, password });
+      // Use api.post to dynamically use localhost or production URL
+      const res = await api.post('/api/auth/login', { email, password });
+      
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('role', res.data.role);
       localStorage.setItem('userName', res.data.name);
