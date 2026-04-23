@@ -6,7 +6,7 @@ const projectSchema = new mongoose.Schema({
     listFixedAsset: { type: String, required: true },
     assetCode: { 
         type: String, 
-        unique: false, 
+        unique: true, 
         sparse: true, 
         required: false,
         trim: true 
