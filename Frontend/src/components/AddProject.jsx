@@ -60,7 +60,7 @@ const AddProject = ({ onProjectAdded, onCancel, projectToEdit }) => {
             <label className={labelStyle}>Asset Type</label>
             <input className={inputStyle} value={formData.listFixedAsset} onChange={e => setFormData({...formData, listFixedAsset: e.target.value})} required />
             <label className={labelStyle}>Asset Code</label>
-            <input className={inputStyle} value={formData.assetCode} onChange={e => setFormData({...formData, assetCode: e.target.value})} required />
+            <input className={inputStyle} value={formData.assetCode} onChange={e => setFormData({...formData, assetCode: e.target.value})} />
           </div>
           <div className="space-y-3">
             <label className={labelStyle}>Insured Date</label>
