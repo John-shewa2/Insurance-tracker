@@ -1,7 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-// const cron = require('node-cron'); // Removed: not needed for Vercel Cron integration
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const ExcelJS = require('exceljs');
@@ -173,7 +172,7 @@ const sendReminders = async () => {
     }
 };
 
-// --- CRON REMINDERS ROUTE (for Vercel Cron) ---
+// --- CRON REMINDERS ROUTE (for external cron services) ---
 app.get('/api/reminders', async (req, res) => {
     try {
         await sendReminders();
@@ -185,8 +184,8 @@ app.get('/api/reminders', async (req, res) => {
 });
 
 // --- CRON REMINDERS ---
-// Removed cron.schedule since Vercel doesn't support persistent processes
-// Use Vercel Cron integration instead (configured in vercel.json)
+// Removed cron.schedule since Render free tier sleeps
+// Use external cron service (e.g., cron-job.org) to call /api/reminders daily
 
 // --- START SERVER ---
 // For local development
