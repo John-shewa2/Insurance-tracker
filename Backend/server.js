@@ -174,18 +174,18 @@ const sendReminders = async () => {
 
 // --- CRON REMINDERS ROUTE (for external cron services) ---
 app.get('/api/reminders', async (req, res) => {
+    // Respond immediately to avoid timeout
+    res.json({ message: 'Reminders processing started' });
+    
+    // Process reminders in background
     try {
         await sendReminders();
-        res.json({ message: 'Reminders sent successfully' });
+        console.log('Reminders sent successfully');
     } catch (err) {
         console.error('Reminder error:', err);
-        res.status(500).json({ error: 'Failed to send reminders' });
     }
 });
 
-// --- CRON REMINDERS ---
-// Removed cron.schedule since Render free tier sleeps
-// Use external cron service (e.g., cron-job.org) to call /api/reminders daily
 
 // --- START SERVER ---
 // For local development
