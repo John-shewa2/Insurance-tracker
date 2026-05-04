@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const cron = require('node-cron');
+// const cron = require('node-cron'); // Removed: not needed for Vercel Cron integration
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
 const ExcelJS = require('exceljs');
@@ -139,8 +139,8 @@ app.get('/api/projects/export', async (req, res) => {
     }
 });
 
-// --- CRON REMINDERS ---
-cron.schedule('0 9 * * *', async () => {
+// --- CRON REMINDERS FUNCTION ---
+const sendReminders = async () => {
     const today = new Date();
     today.setHours(0,0,0,0);
     const windows = [{ days: 60, field: 'reminder60DaysSent' }, { days: 30, field: 'reminder30DaysSent' }];
@@ -171,7 +171,22 @@ cron.schedule('0 9 * * *', async () => {
             } catch (err) { console.error(err); }
         }
     }
+};
+
+// --- CRON REMINDERS ROUTE (for Vercel Cron) ---
+app.get('/api/reminders', async (req, res) => {
+    try {
+        await sendReminders();
+        res.json({ message: 'Reminders sent successfully' });
+    } catch (err) {
+        console.error('Reminder error:', err);
+        res.status(500).json({ error: 'Failed to send reminders' });
+    }
 });
+
+// --- CRON REMINDERS ---
+// Removed cron.schedule since Vercel doesn't support persistent processes
+// Use Vercel Cron integration instead (configured in vercel.json)
 
 // --- START SERVER ---
 const PORT = process.env.PORT || 5000;
